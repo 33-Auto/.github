@@ -16,6 +16,11 @@ on:
         description: "The number of the pull request"
         required: true
         type: string
+      secrets:
+        description: "The name of the secret containing a PAT with 'read:org' scope"
+        required: false
+        type: string
+        default: "ORGANIZATION_TOKEN"
 
 # 'teams:' 권한은 존재하지 않으므로 제거함. 필요한 리포지토 권한만 설정한다.
 permissions:
