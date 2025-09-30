@@ -6,22 +6,22 @@ on:
   workflow_call:
     inputs:
       team-slug-for-review:
-        description: 'The slug of the team to request reviews from'
+        description: "The slug of the team to request reviews from"
         required: true
         type: string
       pr-author:
-        description: 'The login of the PR author'
+        description: "The login of the PR author"
         required: true
         type: string
       pr-number:
-        description: 'The number of the pull request'
+        description: "The number of the pull request"
         required: true
         type: string
 
 permissions:
   pull-requests: write # 리뷰어 요청용
   issues: write # Assignee 추가용
-  contents: read # 팀 멤버 조회에 organization-read 권한이 필요할 수 있으나, 보통 contents:read로 충분
+  teams: read # 팀 멤버 조회에 organization-read 권한이 필요할 수 있으나, 보통 contents:read로 충분
 
 jobs:
   assign-and-request:
@@ -68,7 +68,7 @@ jobs:
               console.info('No reviewers to request.');
               return;
             }
-            
+
             console.log(`Requesting reviews from: ${reviewers.join(', ')}`);
 
             // 3) 최대 15명씩 나눠서 리뷰 요청 (API 제한)
