@@ -1,0 +1,54 @@
+# YOUR_ORGANIZATION/.github/.github/workflows/reusable-close-linked-issues.yml
+
+name: Reusable - Close Linked Issues
+
+on:
+  workflow_call:
+    # 호출하는 워크플로우로부터 받을 입력값들을 정의합니다.
+    inputs:
+      pr-body:
+        description: 'The body of the pull request'
+        required: true
+        type: string
+      issue-number:
+        description: 'The PR number for context' # 로그 출력용
+        required: true
+        type: string
+
+permissions:
+  issues: write
+
+jobs:
+  close-issues:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Close linked issues
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const prBody = `${{ inputs.pr-body }}`;
+            const issueLines = prBody.split('\n');
+
+            const closingKeywords = ['close', 'closes', 'closed', 'fix', 'fixes', 'fixed', 'resolve', 'resolves', 'resolved'];
+            const issuePattern = /#(\d+)/g;
+            
+            for (const line of issueLines) {
+              const lower = line.toLowerCase();
+              if (closingKeywords.some(k => lower.includes(k))) {
+                let match;
+                while ((match = issuePattern.exec(line)) !== null) {
+                  const issue_number = parseInt(match[1]);
+                  try {
+                    await github.rest.issues.update({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number,
+                      state: 'closed'
+                    });
+                    console.log(`✅ Closed issue #${issue_number} from PR #${{ inputs.issue-number }}`);
+                  } catch (e) {
+                    console.error(`❌ Failed to close issue #${issue_number}: ${e.message}`);
+                  }
+                }
+              }
+            }
