@@ -21,7 +21,7 @@ on:
 permissions:
   pull-requests: write # 리뷰어 요청용
   issues: write # Assignee 추가용
-  teams: read # 팀 멤버 조회에 organization-read 권한이 필요할 수 있으나, 보통 contents:read로 충분
+  contents: read # 팀 멤버 조회에 organization-read 권한이 필요할 수 있으나, 보통 contents:read로 충분
 
 jobs:
   assign-and-request:
