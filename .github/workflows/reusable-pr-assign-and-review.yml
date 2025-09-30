@@ -1,4 +1,3 @@
-# .github/workflows/reusable-pr-assign-and-review.yml
 name: Reusable - PR Assignee & Review Request
 
 on:
@@ -16,28 +15,26 @@ on:
         description: "The number of the pull request"
         required: true
         type: string
-      secrets:
-        description: "The name of the secret containing a PAT with 'read:org' scope"
-        required: false
-        type: string
-        default: "ORGANIZATION_TOKEN"
+    # 호출자가 전달할 시크릿을 여기서 선언해야 한다.
+    # 선언하지 않으면 호출자에서 같은 이름으로 넘겨도 오류가 발생한다.
+    secrets:
+      ORGANIZATION_TOKEN:
+        description: "PAT with read:org (및 필요 시 repo 권한)"
+        required: true
 
-# 'teams:' 권한은 존재하지 않으므로 제거함. 필요한 리포지토 권한만 설정한다.
 permissions:
-  pull-requests: write # 리뷰어 요청용
-  issues: write # Assignee 추가용
-  contents: read # (선택) 리포지토 내용 읽기용
+  pull-requests: write # 리뷰 요청용 권한
+  issues: write # assignee 추가용 권한
+  contents: read # 리포지토리 내용 읽기용(선택적)
 
 jobs:
   assign-and-request:
     runs-on: ubuntu-latest
     steps:
       - name: Assign 및 리뷰어 일괄 요청 (ORGANIZATION_TOKEN 사용)
-        # actions/github-script에 github-token으로 PAT 전달
         uses: actions/github-script@v7
         with:
-          # 워크플로우 내에서 사용 가능한 시크릿 이름을 사용한다.
-          # 이 파일에서는 ORGANIZATION_TOKEN 시크릿을 참조하도록 설정했다.
+          # 호출자가 전달한 시크릿을 여기서 사용한다.
           github-token: ${{ secrets.ORGANIZATION_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
