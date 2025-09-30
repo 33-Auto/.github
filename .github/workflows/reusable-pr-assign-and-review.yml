@@ -1,5 +1,4 @@
-# YOUR_ORGANIZATION/.github/.github/workflows/reusable-pr-assign-and-review.yml
-
+# .github/workflows/reusable-pr-assign-and-review.yml
 name: Reusable - PR Assignee & Review Request
 
 on:
@@ -18,25 +17,30 @@ on:
         required: true
         type: string
 
+# 'teams:' 권한은 존재하지 않으므로 제거함. 필요한 리포지토 권한만 설정한다.
 permissions:
   pull-requests: write # 리뷰어 요청용
   issues: write # Assignee 추가용
-  contents: read # 팀 멤버 조회에 organization-read 권한이 필요할 수 있으나, 보통 contents:read로 충분
+  contents: read # (선택) 리포지토 내용 읽기용
 
 jobs:
   assign-and-request:
     runs-on: ubuntu-latest
     steps:
-      - name: Assign 및 리뷰어 일괄 요청
+      - name: Assign 및 리뷰어 일괄 요청 (ORGANIZATION_TOKEN 사용)
+        # actions/github-script에 github-token으로 PAT 전달
         uses: actions/github-script@v7
         with:
+          # 워크플로우 내에서 사용 가능한 시크릿 이름을 사용한다.
+          # 이 파일에서는 ORGANIZATION_TOKEN 시크릿을 참조하도록 설정했다.
+          github-token: ${{ secrets.ORGANIZATION_TOKEN }}
           script: |
             const { owner, repo } = context.repo;
             const prNumber = parseInt('${{ inputs.pr-number }}');
             const prAuthor = '${{ inputs.pr-author }}';
             const teamSlug = '${{ inputs.team-slug-for-review }}';
 
-            // 1) Assignee 지정 (PR 연 사람을 지정)
+            // 1) Assignee 지정 (PR 작성자 지정)
             try {
               await github.rest.issues.addAssignees({
                 owner,
@@ -49,7 +53,7 @@ jobs:
               console.warn(`Could not assign PR author: ${e.message}`);
             }
 
-            // 2) 팀 멤버 전체 조회
+            // 2) 팀 멤버 전체 조회 (PAT로 인증되므로 가능)
             let reviewers = [];
             try {
               const teamMembers = await github.paginate(
@@ -57,7 +61,7 @@ jobs:
                 { org: owner, team_slug: teamSlug }
               );
               const allLogins = teamMembers.map(u => u.login);
-              // PR 작성자만 제외
+              // PR 작성자 제외
               reviewers = allLogins.filter(login => login !== prAuthor);
             } catch (e) {
               console.error(`❌ Failed to fetch team members for '${teamSlug}': ${e.message}`);
