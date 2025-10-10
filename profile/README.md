@@ -43,7 +43,7 @@
     <tr>
       <td><a href="https://github.com/33-Auto/Sampoom-Management-Backend-User">Sampoom-Management-Backend-User</a></td>
       <td>사용자 관리 API</td>
-      <td>🔒 Private</td>
+      <td>🟢 Public</td>
     </tr>
     <tr>
       <td><a href="https://github.com/33-Auto/Sampoom-Management-Backend-Part">Sampoom-Management-Backend-Part</a></td>
