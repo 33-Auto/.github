@@ -6,9 +6,6 @@ on:
     secrets:
       SLACK_WEBHOOK_URL: # 호출하는 쪽에서 Slack Webhook URL을 전달받음
         required: true
-      ORGANIZATION_TOKEN:
-        description: "PAT with read:org (및 필요 시 repo 권한)"
-        required: true
 
 jobs:
   remind:
@@ -17,8 +14,6 @@ jobs:
       - name: 리뷰 승인이 되지 않은 PR 목록 조회 및 Slack 알림
         uses: actions/github-script@v7
         with:
-          # 호출자가 전달한 시크릿을 여기서 사용한다.
-          github-token: ${{ secrets.ORGANIZATION_TOKEN }}
           script: |
             // 1) 오픈된 PR 목록 조회
             const { data: prs } = await github.rest.pulls.list({
