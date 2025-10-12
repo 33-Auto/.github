@@ -3,6 +3,7 @@ name: PR Review Requested → Slack DMs (individual & team)
 on:
   pull_request:
     types: [review_requested]
+  workflow_dispatch: {}   # 수동 테스트 가능
 
 permissions:
   contents: read
@@ -16,19 +17,18 @@ jobs:
       - name: Checkout (for users.yml)
         uses: actions/checkout@v4
 
-      - name: Fan-out Slack DMs
+      - name: Fan-out Slack DMs (with DM channel open)
         uses: actions/github-script@v7
         env:
           ORG: ${{ secrets.ORG }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          ORG_READ_TOKEN: ${{ secrets.ORG_READ_TOKEN }} # optional but recommended
+          ORG_READ_TOKEN: ${{ secrets.ORG_READ_TOKEN }}
         with:
           script: |
             const fs = require('fs');
             const yaml = require('js-yaml');
             const { default: fetch } = await import('node-fetch');
 
-            // -------- helpers --------
             const pr = context.payload.pull_request;
             const act = context.payload.action;
             const requestedReviewer = context.payload.requested_reviewer || null;
@@ -40,24 +40,11 @@ jobs:
               if (!fs.existsSync(path)) return { users: [] };
               return yaml.load(fs.readFileSync(path, 'utf8')) || { users: [] };
             }
-
             const mapping = loadMapping();
             const mapByGithub = new Map(
               (mapping.users || []).map(u => [String(u.github).toLowerCase(), u])
             );
 
-            async function slackLookupByEmail(email) {
-              if (!email) return null;
-              const res = await fetch('https://slack.com/api/users.lookupByEmail', {
-                method: 'GET',
-                headers: { 'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}` },
-              //  URL params appended:
-              });
-              // node-fetch GET with params: easier to build URL:
-              return null;
-            }
-
-            // utility: GET with query params
             async function httpGet(url, headers = {}, params = {}) {
               const qs = new URLSearchParams(params);
               const full = qs.toString() ? `${url}?${qs.toString()}` : url;
@@ -65,34 +52,50 @@ jobs:
               if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
               return await res.json();
             }
+            async function httpPost(url, headers = {}, body = {}) {
+              const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json; charset=utf-8', ...headers },
+                body: JSON.stringify(body)
+              });
+              const json = await res.json();
+              return json;
+            }
 
-            async function slackLookupByEmail2(email) {
-              try {
-                const data = await httpGet(
-                  'https://slack.com/api/users.lookupByEmail',
-                  { 'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}` },
-                  { email }
-                );
-                if (data.ok && data.user && data.user.id) return data.user.id;
-              } catch (e) {}
+            async function slackLookupByEmail(email) {
+              if (!email) return null;
+              const data = await httpGet(
+                'https://slack.com/api/users.lookupByEmail',
+                { 'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+                { email }
+              );
+              if (data.ok && data.user?.id) return data.user.id;
               return null;
             }
 
-            async function slackDM(userId, blocks, fallbackText='PR review requested') {
-              const res = await fetch('https://slack.com/api/chat.postMessage', {
-                method: 'POST',
-                headers: {
-                  'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}`,
-                  'Content-Type': 'application/json; charset=utf-8'
-                },
-                body: JSON.stringify({
-                  channel: userId,
-                  text: fallbackText,
-                  blocks
-                })
-              });
-              const json = await res.json();
-              if (!json.ok) core.warning(`Slack DM failed to ${userId}: ${JSON.stringify(json)}`);
+            async function openDmChannelForUser(userId) {
+              // conversations.open → returns {channel: {id: 'Dxxxx'}}
+              const data = await httpPost(
+                'https://slack.com/api/conversations.open',
+                { 'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+                { users: userId }
+              );
+              if (!data.ok) {
+                core.warning(`conversations.open failed for ${userId}: ${JSON.stringify(data)}`);
+                return null;
+              }
+              return data.channel?.id || null;
+            }
+
+            async function slackDMtoUserId(userId, blocks, fallbackText) {
+              const dmChannel = await openDmChannelForUser(userId);
+              if (!dmChannel) return;
+              const resp = await httpPost(
+                'https://slack.com/api/chat.postMessage',
+                { 'Authorization': `Bearer ${process.env.SLACK_BOT_TOKEN}` },
+                { channel: dmChannel, text: fallbackText, blocks }
+              );
+              if (!resp.ok) core.warning(`chat.postMessage failed: ${JSON.stringify(resp)}`);
             }
 
             function prBlocks(kind, reviewerText) {
@@ -100,7 +103,7 @@ jobs:
                 { type: "header", text: { type: "plain_text", text: kind === 'team' ? "👥 팀 리뷰 요청" : "👀 개인 리뷰 요청" } },
                 {
                   type: "section",
-                  fields: [
+                  "fields": [
                     { type: "mrkdwn", text: `*제목*\n${pr.title}` },
                     { type: "mrkdwn", text: `*레포*\n${context.repo.owner}/${context.repo.repo}` },
                     { type: "mrkdwn", text: `*작성자*\n@${pr.user.login}` },
@@ -117,10 +120,9 @@ jobs:
             }
 
             async function listTeamMembers(teamSlug) {
-              // Use PAT with read:org; fallback to empty
               const token = process.env.ORG_READ_TOKEN;
               if (!token) {
-                core.warning('ORG_READ_TOKEN not set; cannot list team members. Provide mapping users.yml for team members.');
+                core.warning('ORG_READ_TOKEN not set; cannot list team members.');
                 return [];
               }
               const headers = { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github+json' };
@@ -141,64 +143,41 @@ jobs:
               const m = mapByGithub.get(key);
               if (m?.slack) return m.slack;
               if (m?.email) {
-                const id = await slackLookupByEmail2(m.email);
-                if (id) return id;
+                return await slackLookupByEmail(m.email);
               }
-              // No mapping
               return null;
             }
 
-            // guard: only on review_requested & not draft
-            if (act !== 'review_requested') {
-              core.info(`Skip: action=${act}`);
-              return;
-            }
-            if (pr?.draft) {
-              core.info('Skip: draft PR');
-              return;
-            }
+            // ---- main ----
+            core.info(`action=${act}, draft=${pr?.draft}, reviewer=${requestedReviewer?.login || 'null'}, team=${requestedTeam?.slug || 'null'}`);
+
+            if (act !== 'review_requested') { core.info('Skip: not review_requested'); return; }
+            if (pr?.draft) { core.info('Skip: draft PR'); return; }
 
             if (requestedReviewer) {
-              // individual
               const ghLogin = requestedReviewer.login;
               const slackId = await resolveSlackIdForGithub(ghLogin);
-              if (!slackId) {
-                core.warning(`No Slack mapping for GitHub user ${ghLogin}`);
-                return;
-              }
-              await slackDM(slackId, prBlocks('individual', `@${ghLogin}`), 'PR review requested (individual)');
+              core.info(`individual → gh=${ghLogin}, slack=${slackId || 'N/A'}`);
+              if (!slackId) { core.warning(`No Slack mapping for ${ghLogin}`); return; }
+              await slackDMtoUserId(slackId, prBlocks('individual', `@${ghLogin}`), 'PR review requested (individual)');
               return;
             }
 
             if (requestedTeam) {
-              // team fan-out
               const teamSlug = requestedTeam.slug;
               const ghMembers = await listTeamMembers(teamSlug);
+              core.info(`team → slug=${teamSlug}, members=${ghMembers.length}`);
 
-              if (ghMembers.length === 0) {
-                core.warning(`Team ${teamSlug} has no members or cannot fetch. Check ORG_READ_TOKEN or provide users.yml mappings.`);
-                return;
-              }
+              if (ghMembers.length === 0) { core.warning('No team members resolved'); return; }
 
-              // Resolve Slack IDs for each member
-              const targets = [];
+              const blocks = prBlocks('team', `#${teamSlug} (${ghMembers.length}명)`);
               for (const login of ghMembers) {
                 const slackId = await resolveSlackIdForGithub(login);
-                if (slackId) targets.push({ login, slackId });
-                else core.warning(`No Slack mapping for team member ${login}`);
-              }
-
-              if (targets.length === 0) {
-                core.warning('No resolvable Slack IDs for team members.');
-                return;
-              }
-
-              const textReviewer = `#${teamSlug} (팀 ${targets.length}명)`;
-              const blocks = prBlocks('team', textReviewer);
-              for (const t of targets) {
-                await slackDM(t.slackId, blocks, 'PR review requested (team)');
+                core.info(`fan-out → gh=${login}, slack=${slackId || 'N/A'}`);
+                if (!slackId) { core.warning(`No Slack mapping for ${login}`); continue; }
+                await slackDMtoUserId(slackId, blocks, 'PR review requested (team)');
               }
               return;
             }
 
-            core.info('Nothing to do: neither requested_reviewer nor requested_team present.');
+            core.info('Nothing to do: neither individual nor team reviewer present.');
