@@ -35,7 +35,7 @@
       <td>🟢 Public</td>
     </tr>
     <tr>
-      <td rowspan="7"><b>Backend</b></td>
+      <td rowspan="8"><b>Backend</b></td>
       <td><a href="https://github.com/33-Auto/Sampoom-Management-Backend-Auth">Sampoom-Management-Backend-Auth</a></td>
       <td>인증 서비스 API</td>
       <td>🟢 Public</td>
@@ -68,6 +68,11 @@
     <tr>
       <td><a href="https://github.com/33-Auto/Sampoom-Management-Backend-Material">Sampoom-Management-Backend-Material</a></td>
       <td>자재 관리 API</td>
+      <td>🟢 Public</td>
+    </tr>
+    <tr>
+      <td><a href="https://github.com/33-Auto/Sampoom-Management-Backend-Factory">Sampoom-Management-Backend-Factory</a></td>
+      <td>공장 관리 API</td>
       <td>🟢 Public</td>
     </tr>
     <tr>
