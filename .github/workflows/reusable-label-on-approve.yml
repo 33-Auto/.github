@@ -2,6 +2,10 @@ name: Reusable Label on Approval Logic
 
 on:
   workflow_call: # 다른 워크플로우에서 호출될 수 있도록 설정
+    secrets:
+      ORGANIZATION_TOKEN:
+        description: "PAT with read:org (및 필요 시 repo 권한)"
+        required: true
 
 jobs:
   labeler:
