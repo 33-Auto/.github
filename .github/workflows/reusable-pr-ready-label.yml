@@ -1,0 +1,68 @@
+name: Reusable Label on Approval Logic
+
+on:
+  workflow_call: # 다른 워크플로우에서 호출될 수 있도록 설정
+    secrets:
+      ORGANIZATION_TOKEN:
+        description: "PAT with read:org (및 필요 시 repo 권한)"
+        required: true
+
+permissions:
+  pull-requests: write # 라벨 추가/삭제 권한은 이 중앙 워크플로우에만 부여하면 됨
+  contents: read
+
+jobs:
+  labeler:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write # 라벨 추가/삭제 권한은 이 중앙 워크플로우에만 부여하면 됨
+      contents: read
+    steps:
+      - name: Check approval count and apply label
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.ORGANIZATION_TOKEN }}
+          script: |
+            // 이전 단계에서 만들었던 스크립트 로직 전체를 여기에 붙여넣기
+            const pr = github.context.payload.pull_request; // 호출된 워크플로우의 PR 정보를 가져옴
+
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner: github.context.repo.owner,
+              repo: github.context.repo.repo,
+              pull_number: pr.number,
+            });
+
+            const approvingReviewers = new Set();
+            reviews.forEach(review => {
+              if (review.state === 'APPROVED') {
+                approvingReviewers.add(review.user.login);
+              }
+            });
+
+            const approvalCount = approvingReviewers.size;
+            const labelName = 'ready-to-merge';
+
+            // 라벨 존재 여부 확인 로직 개선
+            const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
+              owner: github.context.repo.owner,
+              repo: github.context.repo.repo,
+              issue_number: pr.number,
+            });
+            const hasLabel = currentLabels.some(label => label.name === labelName);
+
+            if (approvalCount >= 3 && !hasLabel) {
+              await github.rest.issues.addLabels({
+                owner: github.context.repo.owner,
+                repo: github.context.repo.repo,
+                issue_number: pr.number,
+                labels: [labelName],
+              });
+            } 
+            else if (approvalCount < 3 && hasLabel) {
+              await github.rest.issues.removeLabel({
+                owner: github.context.repo.owner,
+                repo: github.context.repo.repo,
+                issue_number: pr.number,
+                name: labelName,
+              });
+            }
