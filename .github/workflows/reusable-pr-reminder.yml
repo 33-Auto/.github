@@ -6,6 +6,8 @@ on:
     secrets:
       SLACK_WEBHOOK_URL: # 호출하는 쪽에서 Slack Webhook URL을 전달받음
         required: true
+      GITHUB_TOKEN:
+        required: true
 
 jobs:
   remind:
