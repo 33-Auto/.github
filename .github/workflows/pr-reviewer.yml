@@ -1,0 +1,90 @@
+# .github/workflows/pr_reviewer.yml
+name: Pull Request
+
+on:
+  pull_request:
+    types: [review_requested]  # 리뷰요청 시 트리거
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  specific_review_requested:
+    runs-on: ubuntu-latest
+    steps:
+      # ─────────────────────────────────────────────────────────
+      # 개인 리뷰어 알림
+      # ─────────────────────────────────────────────────────────
+      - name: pr reviewer 되면 slack 알림 보냄 (개인)
+        if: >
+          ${{
+            github.event.action == 'review_requested' &&
+            github.event.requested_reviewer != null &&
+            github.event.pull_request.draft == false
+          }}
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          channel-id: ${{ secrets.TEST_CHANNEL }}   # C로 시작하는 채널 ID
+          payload: |
+            {
+              "text": "pr review request",
+              "blocks": [
+                { "type": "header", "text": { "type": "plain_text", "text": "👀 리뷰 요청 (개인)" } },
+                {
+                  "type": "section",
+                  "fields": [
+                    { "type": "mrkdwn", "text": "*제목*\n${{ github.event.pull_request.title }}" },
+                    { "type": "mrkdwn", "text": "*레포*\n${{ github.repository }}" },
+                    { "type": "mrkdwn", "text": "*작성자*\n@${{ github.event.pull_request.user.login }}" },
+                    { "type": "mrkdwn", "text": "*리뷰어*\n@${{ github.event.requested_reviewer.login }}" }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    { "type": "button", "text": { "type": "plain_text", "text": "PR 열기" }, "url": "${{ github.event.pull_request.html_url }}" }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.TEST_BOT_TOKEN }}  # xoxb-... 토큰
+
+      # ─────────────────────────────────────────────────────────
+      # 팀 리뷰어 알림
+      # ─────────────────────────────────────────────────────────
+      - name: pr reviewer 되면 slack 알림 보냄 (팀)
+        if: >
+          ${{
+            github.event.action == 'review_requested' &&
+            github.event.requested_team != null &&
+            github.event.pull_request.draft == false
+          }}
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          channel-id: ${{ secrets.TEST_CHANNEL }}   # 팀용 채널 별도면 다른 Secret 사용
+          payload: |
+            {
+              "text": "pr review request (team)",
+              "blocks": [
+                { "type": "header", "text": { "type": "plain_text", "text": "👥 리뷰 요청 (팀)" } },
+                {
+                  "type": "section",
+                  "fields": [
+                    { "type": "mrkdwn", "text": "*제목*\n${{ github.event.pull_request.title }}" },
+                    { "type": "mrkdwn", "text": "*레포*\n${{ github.repository }}" },
+                    { "type": "mrkdwn", "text": "*작성자*\n@${{ github.event.pull_request.user.login }}" },
+                    { "type": "mrkdwn", "text": "*팀*\n#${{ github.event.requested_team.slug }}" }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    { "type": "button", "text": { "type": "plain_text", "text": "PR 열기" }, "url": "${{ github.event.pull_request.html_url }}" }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.TEST_BOT_TOKEN }}  # xoxb-... 토큰
