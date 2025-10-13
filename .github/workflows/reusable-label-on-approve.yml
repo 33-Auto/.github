@@ -1,8 +1,9 @@
+# FILE: .github/workflows/reusable-label-on-approve.yml
+
 name: Reusable Label on Approval Logic
 
 on:
   workflow_call:
-    # PR 번호를 input으로 받도록 정의
     inputs:
       pr-number:
         description: 'The number of the pull request'
@@ -17,54 +18,72 @@ jobs:
   labeler:
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: write # 라벨 추가/삭제 권한은 이 중앙 워크플로우에만 부여하면 됨
+      pull-requests: write
       contents: read
     steps:
       - name: Check approval count and apply label
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
-          # 호출자가 전달한 시크릿을 여기서 사용한다.
           github-token: ${{ secrets.ORGANIZATION_TOKEN }}
           script: |
-            const pr = github.context.payload.pull_request; // 호출된 워크플로우의 PR 정보를 가져옴
-
-            const { data: reviews } = await github.rest.pulls.listReviews({
-              owner: github.context.repo.owner,
-              repo: github.context.repo.repo,
-              pull_number: pr.number,
-            });
-
-            const approvingReviewers = new Set();
-            reviews.forEach(review => {
-              if (review.state === 'APPROVED') {
-                approvingReviewers.add(review.user.login);
-              }
-            });
-
-            const approvalCount = approvingReviewers.size;
+            const prNumber = ${{ inputs.pr-number }};
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
             const labelName = 'ready-to-merge';
 
-            // 라벨 존재 여부 확인 로직 개선
+            console.log(`Processing PR #${prNumber} in ${owner}/${repo}`);
+
+            // 1. PR의 모든 리뷰 목록 가져오기
+            const { data: reviews } = await github.rest.pulls.listReviews({
+              owner,
+              repo,
+              pull_number: prNumber,
+            });
+
+            // 2. 사용자별 최신 리뷰 상태를 집계하여 순수 승인자 계산
+            const latestReviews = new Map();
+            for (const review of reviews) {
+              if (review.state !== 'PENDING' && review.user) {
+                // DISMISSED된 리뷰는 이전 승인을 무효화하므로 덮어쓴다.
+                latestReviews.set(review.user.login, review.state);
+              }
+            }
+
+            const approvingReviewers = new Set();
+            for (const [user, state] of latestReviews.entries()) {
+              if (state === 'APPROVED') {
+                approvingReviewers.add(user);
+              }
+            }
+            
+            const approvalCount = approvingReviewers.size;
+            console.log(`Unique approval count: ${approvalCount}`);
+
+            // 3. 현재 PR의 라벨 목록 확인
             const { data: currentLabels } = await github.rest.issues.listLabelsOnIssue({
-              owner: github.context.repo.owner,
-              repo: github.context.repo.repo,
-              issue_number: pr.number,
+              owner,
+              repo,
+              issue_number: prNumber,
             });
             const hasLabel = currentLabels.some(label => label.name === labelName);
 
+            // 4. 승인 수에 따라 라벨 추가 또는 삭제
             if (approvalCount >= 3 && !hasLabel) {
+              console.log(`Adding '${labelName}' label.`);
               await github.rest.issues.addLabels({
-                owner: github.context.repo.owner,
-                repo: github.context.repo.repo,
-                issue_number: pr.number,
+                owner,
+                repo,
+                issue_number: prNumber,
                 labels: [labelName],
               });
-            } 
-            else if (approvalCount < 3 && hasLabel) {
+            } else if (approvalCount < 3 && hasLabel) {
+              console.log(`Removing '${labelName}' label.`);
               await github.rest.issues.removeLabel({
-                owner: github.context.repo.owner,
-                repo: github.context.repo.repo,
-                issue_number: pr.number,
+                owner,
+                repo,
+                issue_number: prNumber,
                 name: labelName,
               });
+            } else {
+              console.log('No label change needed.');
             }
