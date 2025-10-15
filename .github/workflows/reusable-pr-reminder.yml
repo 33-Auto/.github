@@ -6,7 +6,7 @@ on:
     secrets:
       SLACK_WEBHOOK_URL: # 호출하는 쪽에서 Slack Webhook URL을 전달받음
         required: true
-      SLACK_USER_MAP: # (선택) GitHub 유저와 Slack 유저를 매핑하기 위한 정보
+      SLACK_USER_MAP: # GitHub 유저와 Slack 유저를 매핑하기 위한 정보
         required: false
 
 jobs:
@@ -17,7 +17,18 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            // 1) 오픈된 PR 목록 조회
+            // --- [로그 추가 1] ---
+            // 워크플로우가 GitHub 변수로부터 받은 원본 SLACK_USER_MAP 문자열을 출력한다.
+            // 이 값이 비어있거나 '{}' 라면 변수가 제대로 전달되지 않은 것이다.
+            const rawSlackUserMap = '${{ secrets.SLACK_USER_MAP || '{}' }}';
+            console.log(`[DEBUG] Received SLACK_USER_MAP string: ${rawSlackUserMap}`);
+
+            const slackUserMap = JSON.parse(rawSlackUserMap);
+            
+            // --- [로그 추가 2] ---
+            // JSON 파싱 후 생성된 자바스크립트 객체를 출력한다.
+            console.log('[DEBUG] Parsed slackUserMap object:', slackUserMap);
+
             const { data: prs } = await github.rest.pulls.list({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -25,12 +36,9 @@ jobs:
             });
 
             const prsToRemind = [];
-            // (선택) Slack 멘션을 위한 유저 맵핑 정보 (JSON 형태의 Secret/Variable)
-            const slackUserMap = JSON.parse('${{ secrets.SLACK_USER_MAP || '{}' }}');
-            const repoName = context.repo.repo; // 현재 리포지토리 이름 가져오기
+            const repoName = context.repo.repo;
 
             for (const pr of prs) {
-              // 드래프트이거나 'do-not-remind' 라벨이 붙은 PR은 건너뜀
               if (pr.draft || pr.labels.some(label => label.name === 'do-not-remind')) {
                 continue;
               }
@@ -41,7 +49,6 @@ jobs:
                 pull_number: pr.number,
               });
 
-              // 'APPROVED' 상태의 리뷰를 남긴 고유한 유저 목록 생성
               const approvingReviewers = new Set();
               reviews.forEach(review => {
                 if (review.state === 'APPROVED') {
@@ -51,7 +58,6 @@ jobs:
 
               const approvalCount = approvingReviewers.size;
 
-              // 승인 수가 3명 미만인 경우에만 리마인더 목록에 추가
               if (approvalCount < 3) {
                 const prInfo = {
                   ...pr,
@@ -59,13 +65,18 @@ jobs:
                   approvers: Array.from(approvingReviewers),
                   reviewers: pr.requested_reviewers.map(r => r.login),
                 };
+
+                // --- [로그 추가 3] ---
+                // 알림 대상이 될 각 PR의 상세 정보를 출력한다.
+                // 특히 prInfo.reviewers에 리뷰 요청자 목록이 올바르게 들어있는지 확인한다.
+                console.log(`\n[DEBUG] Processing PR #${pr.number}: ${pr.title}`);
+                console.log(` -> Reviewers requested: ${JSON.stringify(prInfo.reviewers)}`);
+
                 prsToRemind.push(prInfo);
               }
             }
 
-            // 리마인드가 필요한 PR이 있을 경우 Slack 메시지 전송
             if (prsToRemind.length > 0) {
-              // --- Slack Block Kit을 사용한 메시지 구성 ---
               const blocks = [
                 {
                   "type": "header",
@@ -93,8 +104,19 @@ jobs:
                 
                 const reviewerMentions = pr.reviewers.map(reviewer => {
                   const slackUserId = slackUserMap[reviewer];
+                  
+                  // --- [로그 추가 4] ---
+                  // 각 리뷰어에 대해 매핑이 어떻게 이루어지는지 상세히 출력한다.
+                  // "Found mapping" 또는 "Mapping NOT found" 로그를 통해 매핑 성공 여부를 확인할 수 있다.
+                  if (slackUserId) {
+                    console.log(` -> Mapping for '${reviewer}': Found. Slack ID: ${slackUserId}`);
+                  } else {
+                    console.log(` -> Mapping for '${reviewer}': NOT found. Using GitHub ID.`);
+                  }
+                  
                   return slackUserId ? `<@${slackUserId}>` : reviewer;
                 }).join(', ');
+
                 const reviewerText = reviewerMentions.length > 0 ? reviewerMentions : '지정되지 않음';
 
                 blocks.push({
@@ -120,7 +142,7 @@ jobs:
               await fetch(slackWebhookUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ blocks: blocks }), // text 대신 blocks를 사용
+                body: JSON.stringify({ blocks: blocks }),
               });
             } else {
               console.log("No PRs needing more approvals found.");
