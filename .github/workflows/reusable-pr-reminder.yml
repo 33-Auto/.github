@@ -3,10 +3,12 @@ name: Reusable PR Reminder Logic
 # 다른 워크플로우에서 호출될 수 있도록 설정
 on:
   workflow_call:
+    inputs:
+      SLACK_USER_MAP:
+        required: true
+        type: string
     secrets:
       SLACK_WEBHOOK_URL: # 호출하는 쪽에서 Slack Webhook URL을 전달받음
-        required: true
-      SLACK_USER_MAP: # GitHub 유저와 Slack 유저를 매핑하기 위한 정보
         required: true
 
 jobs:
