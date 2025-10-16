@@ -24,6 +24,7 @@ jobs:
           script: |
             // env로 전달된 문자열을 가져와서 JSON 파싱
             const rawSlackUserMap = process.env.SLACK_USER_MAP || '{}';
+            console.log('[DEBUG] Raw slackUserMap object:', rawSlackUserMap);
             let slackUserMap = {};
             try {
               slackUserMap = JSON.parse(rawSlackUserMap);
