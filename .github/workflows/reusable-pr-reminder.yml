@@ -7,7 +7,7 @@ on:
       SLACK_WEBHOOK_URL: # 호출하는 쪽에서 Slack Webhook URL을 전달받음
         required: true
       SLACK_USER_MAP: # GitHub 유저와 Slack 유저를 매핑하기 위한 정보
-        required: false
+        required: true
 
 jobs:
   remind:
