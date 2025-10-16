@@ -22,7 +22,7 @@ jobs:
             // --- [로그 추가 1] ---
             // 워크플로우가 GitHub 변수로부터 받은 원본 SLACK_USER_MAP 문자열을 출력한다.
             // 이 값이 비어있거나 '{}' 라면 변수가 제대로 전달되지 않은 것이다.
-            const rawSlackUserMap = '${{ inputs.SLACK_USER_MAP || '{}' }}';
+            const rawSlackUserMap = '${{ inputs.SLACK_USER_MAP }}';
             console.log(`[DEBUG] Received SLACK_USER_MAP string: ${rawSlackUserMap}`);
 
             const slackUserMap = JSON.parse(rawSlackUserMap);
