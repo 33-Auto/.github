@@ -1,6 +1,5 @@
 name: Reusable PR Reminder Logic
 
-# 다른 워크플로우에서 호출될 수 있도록 설정
 on:
   workflow_call:
     inputs:
@@ -8,7 +7,7 @@ on:
         required: true
         type: string
     secrets:
-      SLACK_WEBHOOK_URL: # 호출하는 쪽에서 Slack Webhook URL을 전달받음
+      SLACK_WEBHOOK_URL:
         required: true
 
 jobs:
@@ -17,135 +16,123 @@ jobs:
     steps:
       - name: 리뷰 승인이 되지 않은 PR 목록 조회 및 Slack 알림
         uses: actions/github-script@v7
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
           script: |
-            // --- [로그 추가 1] ---
-            // 워크플로우가 GitHub 변수로부터 받은 원본 SLACK_USER_MAP 문자열을 출력한다.
-            // 이 값이 비어있거나 '{}' 라면 변수가 제대로 전달되지 않은 것이다.
-            const rawSlackUserMap = '${{ inputs.SLACK_USER_MAP }}';
-            console.log(`[DEBUG] Received SLACK_USER_MAP string: ${rawSlackUserMap}`);
+            const rawSlackUserMap = '${{ inputs.SLACK_USER_MAP }}'
+            console.log(`[DEBUG] Received SLACK_USER_MAP string: ${rawSlackUserMap}`)
 
-            const slackUserMap = JSON.parse(rawSlackUserMap);
-            
-            // --- [로그 추가 2] ---
-            // JSON 파싱 후 생성된 자바스크립트 객체를 출력한다.
-            console.log('[DEBUG] Parsed slackUserMap object:', slackUserMap);
+            let slackUserMap = {}
+            try {
+              slackUserMap = rawSlackUserMap ? JSON.parse(rawSlackUserMap) : {}
+            } catch (err) {
+              console.log('[WARN] Invalid or empty SLACK_USER_MAP, using empty object instead.')
+              slackUserMap = {}
+            }
+
+            console.log('[DEBUG] Parsed slackUserMap object:', slackUserMap)
 
             const { data: prs } = await github.rest.pulls.list({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
-            });
+            })
 
-            const prsToRemind = [];
-            const repoName = context.repo.repo;
+            const prsToRemind = []
+            const repoName = context.repo.repo
 
             for (const pr of prs) {
-              if (pr.draft || pr.labels.some(label => label.name === 'do-not-remind')) {
-                continue;
-              }
-              
+              if (pr.draft || pr.labels.some(label => label.name === 'do-not-remind')) continue
+
               const { data: reviews } = await github.rest.pulls.listReviews({
                 owner: context.repo.owner,
                 repo: repoName,
                 pull_number: pr.number,
-              });
+              })
 
-              const approvingReviewers = new Set();
+              const approvingReviewers = new Set()
               reviews.forEach(review => {
-                if (review.state === 'APPROVED') {
-                  approvingReviewers.add(review.user.login);
-                }
-              });
+                if (review.state === 'APPROVED') approvingReviewers.add(review.user.login)
+              })
 
-              const approvalCount = approvingReviewers.size;
+              const approvalCount = approvingReviewers.size
 
               if (approvalCount < 3) {
                 const prInfo = {
                   ...pr,
-                  approvalCount: approvalCount,
+                  approvalCount,
                   approvers: Array.from(approvingReviewers),
                   reviewers: pr.requested_reviewers.map(r => r.login),
-                };
-
-                // --- [로그 추가 3] ---
-                // 알림 대상이 될 각 PR의 상세 정보를 출력한다.
-                // 특히 prInfo.reviewers에 리뷰 요청자 목록이 올바르게 들어있는지 확인한다.
-                console.log(`\n[DEBUG] Processing PR #${pr.number}: ${pr.title}`);
-                console.log(` -> Reviewers requested: ${JSON.stringify(prInfo.reviewers)}`);
-
-                prsToRemind.push(prInfo);
-              }
-            }
-
-            if (prsToRemind.length > 0) {
-              const blocks = [
-                {
-                  "type": "header",
-                  "text": {
-                    "type": "plain_text",
-                    "text": "🔔 리뷰 승인이 더 필요합니다!"
-                  }
-                },
-                {
-                  "type": "context",
-                  "elements": [
-                    {
-                      "type": "mrkdwn",
-                      "text": `현재 *${prsToRemind.length}개*의 PR이 리뷰를 기다리고 있습니다.`
-                    }
-                  ]
-                },
-                {
-                  "type": "divider"
                 }
-              ];
 
-              for (const pr of prsToRemind) {
-                const approverText = pr.approvers.length > 0 ? pr.approvers.join(', ') : '없음';
-                
-                const reviewerMentions = pr.reviewers.map(reviewer => {
-                  const slackUserId = slackUserMap[reviewer];
-                  
-                  // --- [로그 추가 4] ---
-                  // 각 리뷰어에 대해 매핑이 어떻게 이루어지는지 상세히 출력한다.
-                  // "Found mapping" 또는 "Mapping NOT found" 로그를 통해 매핑 성공 여부를 확인할 수 있다.
-                  if (slackUserId) {
-                    console.log(` -> Mapping for '${reviewer}': Found. Slack ID: ${slackUserId}`);
-                  } else {
-                    console.log(` -> Mapping for '${reviewer}': NOT found. Using GitHub ID.`);
-                  }
-                  
-                  return slackUserId ? `<@${slackUserId}>` : reviewer;
-                }).join(', ');
+                console.log(`\n[DEBUG] Processing PR #${pr.number}: ${pr.title}`)
+                console.log(` -> Reviewers requested: ${JSON.stringify(prInfo.reviewers)}`)
 
-                const reviewerText = reviewerMentions.length > 0 ? reviewerMentions : '지정되지 않음';
-
-                blocks.push({
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": `*<${pr.html_url}|[${repoName}] #${pr.number} ${pr.title}>*`
-                  }
-                });
-                blocks.push({
-                  "type": "section",
-                  "fields": [
-                    { "type": "mrkdwn", "text": `*승인 현황:*\n${pr.approvalCount}/3` },
-                    { "type": "mrkdwn", "text": `*작성자:*\n${pr.user.login}` },
-                    { "type": "mrkdwn", "text": `*승인한 리뷰어:*\n${approverText}` },
-                    { "type": "mrkdwn", "text": `*리뷰 요청:*\n${reviewerText}` }
-                  ]
-                });
-                blocks.push({ "type": "divider" });
+                prsToRemind.push(prInfo)
               }
-
-              const slackWebhookUrl = "${{ secrets.SLACK_WEBHOOK_URL }}";
-              await fetch(slackWebhookUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ blocks: blocks }),
-              });
-            } else {
-              console.log("No PRs needing more approvals found.");
             }
+
+            if (prsToRemind.length === 0) {
+              console.log('No PRs needing more approvals found.')
+              return
+            }
+
+            const blocks = [
+              {
+                type: 'header',
+                text: { type: 'plain_text', text: '🔔 리뷰 승인이 더 필요합니다!' },
+              },
+              {
+                type: 'context',
+                elements: [
+                  {
+                    type: 'mrkdwn',
+                    text: `현재 *${prsToRemind.length}개*의 PR이 리뷰를 기다리고 있습니다.`,
+                  },
+                ],
+              },
+              { type: 'divider' },
+            ]
+
+            for (const pr of prsToRemind) {
+              const approverText = pr.approvers.length ? pr.approvers.join(', ') : '없음'
+
+              const reviewerMentions = pr.reviewers
+                .map(reviewer => {
+                  const slackUserId = slackUserMap[reviewer]
+                  if (slackUserId) {
+                    console.log(` -> Mapping for '${reviewer}': Found. Slack ID: ${slackUserId}`)
+                  } else {
+                    console.log(` -> Mapping for '${reviewer}': NOT found. Using GitHub ID.`)
+                  }
+                  return slackUserId ? `<@${slackUserId}>` : reviewer
+                })
+                .join(', ')
+
+              const reviewerText = reviewerMentions.length ? reviewerMentions : '지정되지 않음'
+
+              blocks.push({
+                type: 'section',
+                text: {
+                  type: 'mrkdwn',
+                  text: `*<${pr.html_url}|[${repoName}] #${pr.number} ${pr.title}>*`,
+                },
+              })
+              blocks.push({
+                type: 'section',
+                fields: [
+                  { type: 'mrkdwn', text: `*승인 현황:*\n${pr.approvalCount}/3` },
+                  { type: 'mrkdwn', text: `*작성자:*\n${pr.user.login}` },
+                  { type: 'mrkdwn', text: `*승인한 리뷰어:*\n${approverText}` },
+                  { type: 'mrkdwn', text: `*리뷰 요청:*\n${reviewerText}` },
+                ],
+              })
+              blocks.push({ type: 'divider' })
+            }
+
+            await fetch(process.env.SLACK_WEBHOOK_URL, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ blocks }),
+            })
