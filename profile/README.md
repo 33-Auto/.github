@@ -46,6 +46,11 @@
       <td>🟢 Public</td>
     </tr>
     <tr>
+      <td><a href="https://github.com/33-Auto/Sampoom-Management-Backend-HR">Sampoom-Management-Backend-HR</a></td>
+      <td>인사 관리 API</td>
+      <td>🟢 Public</td>
+    </tr>
+    <tr>
       <td><a href="https://github.com/33-Auto/Sampoom-Management-Backend-Part">Sampoom-Management-Backend-Part</a></td>
       <td>부품 관리 API</td>
       <td>🟢 Public</td>
