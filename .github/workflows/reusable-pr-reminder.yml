@@ -114,7 +114,7 @@ jobs:
                 {
                   type: 'section',
                   fields: [
-                    { type: 'mrkdwn', text: `*승인 현황:*\n${pr.approvalCount}/3` },
+                    { type: 'mrkdwn', text: `*승인 현황:*\n${pr.approvalCount}/1` },
                     { type: 'mrkdwn', text: `*작성자:*\n${pr.user.login}` },
                     { type: 'mrkdwn', text: `*승인한 리뷰어:*\n${approverText}` },
                     { type: 'mrkdwn', text: `*리뷰 요청:*\n${reviewerText}` },
