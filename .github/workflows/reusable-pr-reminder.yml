@@ -60,7 +60,7 @@ jobs:
 
               const approvalCount = approvingReviewers.size;
 
-              if (approvalCount < 3) {
+              if (approvalCount < 1) {
                 const prInfo = {
                   ...pr,
                   approvalCount,
